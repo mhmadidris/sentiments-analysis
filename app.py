@@ -1,6 +1,7 @@
 import io
 from dash import Dash, dash_table, dcc, html
 from dash.dependencies import Input, Output
+from flask import Flask
 import pandas as pd
 import plotly.express as px
 from textblob import TextBlob
@@ -8,7 +9,8 @@ from wordcloud import WordCloud
 import base64
 
 # Initialize the Dash app
-app = Dash(__name__)
+server = Flask(__name__)
+app = Dash(__name__, server=server)
 
 # Layout of the Dash app
 app.layout = html.Div(children=[
