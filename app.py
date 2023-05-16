@@ -1,153 +1,85 @@
-import io
-from dash import Dash, dash_table, dcc, html
-from dash.dependencies import Input, Output
-from flask import Flask
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
+from flask import Flask, render_template, request
 from textblob import TextBlob
+from tqdm import tqdm
 from wordcloud import WordCloud
+from io import BytesIO
 import base64
 
-# Initialize the Dash app
-server = Flask(__name__)
-app = Dash(__name__, server=server)
+app = Flask(__name__)
 
-# Layout of the Dash app
-app.layout = html.Div(children=[
-    html.H1(children='Sentiment Word Clouds', style={'textAlign': 'center'}),
-    
-    dcc.Upload(
-        id='upload-data',
-        children=html.Div([
-            'Drag and Drop or ',
-            html.A('Select File')
-        ]),
-        style={
-            'width': '30%',
-            'height': '60px',
-            'lineHeight': '60px',
-            'borderWidth': '1px',
-            'borderStyle': 'dashed',
-            'borderRadius': '5px',
-            'textAlign': 'center',
-            'margin': '0 auto'
-        }
-    ),
-    
-    dcc.Loading(
-        id='loading',
-        type='circle',
-        children=[
-            html.Div(id='output-data-upload')
-        ],
-        style={'display': 'flex', 'justifyContent': 'center', 'alignItems': 'center', 'height': '100%'}
-    )
-])
+def get_sentiment_analysis_from_csv(file):
+    df = pd.read_csv(file)
+    sentiments = []
+    for index, row in tqdm(df.iterrows(), total=len(df), desc='Performing Sentiment Analysis'):
+        title = str(row['title'])
+        blob = TextBlob(title)
+        sentiment = blob.sentiment.polarity
+        sentiments.append({'title': title, 'sentiment': sentiment})
+    return sentiments
 
-# Callback function to process the uploaded file and perform sentiment analysis
-@app.callback(Output('output-data-upload', 'children'),
-              Input('upload-data', 'contents'),
-              Input('upload-data', 'filename'))
-def update_output(contents, filename):
-    if contents is not None:
-        # Read the CSV file
-        content_type, content_string = contents.split(',')
-        decoded = base64.b64decode(content_string)
-        try:
-            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
-        except Exception as e:
-            return html.Div([
-                'There was an error processing this file.'
-            ])
-        
-        # Perform sentiment analysis
-        sentiments = []
-        for title in df['title']:
-            blob = TextBlob(title)
-            sentiment = blob.sentiment.polarity
-            if sentiment < -0.6:
-                sentiment_label = 'Very Negative'
-            elif sentiment < -0.2:
-                sentiment_label = 'Negative'
-            elif sentiment <= 0.2:
-                sentiment_label = 'Neutral'
-            elif sentiment <= 0.6:
-                sentiment_label = 'Positive'
-            else:
-                sentiment_label = 'Very Positive'
-            sentiments.append({'title': title, 'sentiment': sentiment, 'sentiment_label': sentiment_label})
-        
-        # Extract positive and negative titles
-        positive_titles = [sentiment['title'] for sentiment in sentiments if sentiment['sentiment'] > 0 and sentiment['title'] is not None]
-        negative_titles = [sentiment['title'] for sentiment in sentiments if sentiment['sentiment'] < 0 and sentiment['title'] is not None]
-        
-        # Generate word clouds for positive and negative titles
-        if positive_titles:
-            positive_text = ' '.join(positive_titles)
-            positive_wordcloud = WordCloud(width=800, height=800, background_color='white', min_font_size=10).generate(positive_text)
-            fig_positive = px.imshow(positive_wordcloud.to_array())
-            fig_positive.update_layout(title_text='Positive Sentiment Word Cloud')
-            
-        if negative_titles:
-            negative_text = ' '.join(negative_titles)
-            negative_wordcloud = WordCloud(width=800, height=800, background_color='white', min_font_size=10).generate(negative_text)
-            fig_negative = px.imshow(negative_wordcloud.to_array())
-            fig_negative.update_layout(title_text='Negative Sentiment Word Cloud')
-        
-        # Read the CSV file
-        try:
-            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
-        except Exception as e:
-            return html.Div([
-                'There was an error processing this file.'
-            ]), {'display': 'none'}
-        
-        # Perform sentiment analysis
-        sentiments = []
-        for title in df['title']:
-            blob = TextBlob(title)
-            sentiment = blob.sentiment.polarity
-            sentiments.append(sentiment)
-        
-        # Sentiment distribution
-        sentiment_distribution = {
-            'Very Negative': len([s for s in sentiments if s < -0.6]),
-            'Negative': len([s for s in sentiments if -0.6 <= s < -0.2]),
-            'Neutral': len([s for s in sentiments if -0.2 <= s <= 0.2]),
-            'Positive': len([s for s in sentiments if 0.2 < s <= 0.6]),
-            'Very Positive': len([s for s in sentiments if s > 0.6])
-        }
-        
-        # Generate sentiment distribution chart
-        fig_sentiment = px.bar(
-            x=list(sentiment_distribution.keys()),
-            y=list(sentiment_distribution.values()),
-            labels={'x': 'Sentiment', 'y': 'Count'},
-            title='Sentiment Distribution'
-        )
-        
-        # Return the word cloud figures and the sentiment analysis pie chart
-        return [
-          html.Div(
-                dash_table.DataTable(
-                    data=df.to_dict('records'),
-                    page_size=10,
-                    style_table={'overflowX': 'auto'},
-                    style_cell={
-                        'minWidth': '0px',
-                        'maxWidth': '180px',
-                        'whiteSpace': 'normal'
-                    }
-                ),
-                style={'margin': '20px', 'overflowX': 'auto'}
-            ),
-            html.H2(children='Positive Sentiment'),
-            dcc.Graph(figure=fig_positive),
-            html.H2(children='Negative Sentiment'),
-            dcc.Graph(figure=fig_negative),
-            html.H2(children='Sentiment Analysis'),
-            dcc.Graph(figure=fig_sentiment)
-        ]
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        file = request.files['file']
+        if file.filename.endswith('.csv'):
+            sentiments = get_sentiment_analysis_from_csv(file)
+            df2 = pd.DataFrame(sentiments)
+            bins = [-1, -0.5, 0, 0.5, 1]
+            labels = ['Very Negative', 'Negative', 'Positive', 'Very Positive']
+            df2['sentiment_group'] = pd.cut(df2['sentiment'], bins=bins, labels=labels)
+            sentiment_counts = df2['sentiment_group'].value_counts()
+            fig = go.Figure(data=go.Bar(x=sentiment_counts.index, y=sentiment_counts.values))
+            fig.update_layout(
+                title='Sentiment Analysis News',
+                xaxis_title='Sentiment Group',
+                yaxis_title='Number of News',
+                template='plotly_white'
+            )
+            plot_html = fig.to_html(full_html=False)
+
+            # Perform word cloud visualization for positive and negative sentiment words
+            positive_titles = [sentiment['title'] for sentiment in sentiments if sentiment['sentiment'] > 0 and sentiment['title'] is not None]
+            negative_titles = [sentiment['title'] for sentiment in sentiments if sentiment['sentiment'] < 0 and sentiment['title'] is not None]
+
+            # Generate word cloud for positive sentiment words
+            if positive_titles:
+                positive_text = ' '.join(positive_titles)
+                positive_wordcloud = WordCloud().generate(positive_text)
+                buffer = BytesIO()
+                positive_wordcloud.to_image().save(buffer, format='PNG')
+                positive_wordcloud_encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+            # Generate word cloud for negative sentiment words
+            if negative_titles:
+                negative_text = ' '.join(negative_titles)
+                negative_wordcloud = WordCloud().generate(negative_text)
+                buffer = BytesIO()
+                negative_wordcloud.to_image().save(buffer, format='PNG')
+                negative_wordcloud_encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+            # Generate heatmap
+            heatmap_data = df2.pivot_table(index='sentiment_group', columns='sentiment_group', values='sentiment', aggfunc='count', fill_value=0)
+            fig_heatmap = go.Figure(data=go.Heatmap(
+                z=heatmap_data.values,
+                x=labels,
+                y=labels,
+                colorscale='RdYlGn',
+                zmin=0,
+                zmax=heatmap_data.values.max(),
+                colorbar=dict(title='Number of News')
+            ))
+            fig_heatmap.update_layout(
+                title='Sentiment Analysis Heatmap',
+                xaxis_title='Sentiment Group',
+                yaxis_title='Sentiment Group',
+                template='plotly_white'
+            )
+            heatmap_html = fig_heatmap.to_html(full_html=False)
+
+            return render_template('index.html', plot_html=plot_html, positive_wordcloud_encoded=positive_wordcloud_encoded, negative_wordcloud_encoded=negative_wordcloud_encoded, heatmap_html=heatmap_html)
+    return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run(debug=True)

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sentiment Analysis</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .upload-form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            background-color: #f8f8f8;
+            margin-bottom: 20px;
+        }
+    
+        .upload-form label {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+    
+        .upload-form input[type="file"] {
+            display: none;
+        }
+    
+        .upload-form .file-upload {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 200px;
+            height: 40px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    
+        .upload-form .file-upload:hover {
+            background-color: #f0f0f0;
+        }
+    
+        .upload-form .file-upload span {
+            font-size: 16px;
+            font-weight: bold;
+        }
+    
+        .upload-form .selected-file {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+    
+        .upload-form .submit-btn {
+            margin-top: 20px;
+        }
+    </style>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('file');
+            const selectedFileDiv = document.getElementById('selected-file');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const submitBtn = document.querySelector('.submit-btn');
+    
+            fileInput.addEventListener('change', function() {
+                const file = this.files[0];
+                if (file) {
+                    selectedFileDiv.textContent = 'Selected File: ' + file.name;
+                } else {
+                    selectedFileDiv.textContent = '';
+                }
+            });
+    
+            submitBtn.addEventListener('click', function() {
+                loadingIndicator.style.display = 'block';
+            });
+        });
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-5">Upload CSV</h1>
+        {% if error %}
+            <p class="text-danger">Error: {{ error }}</p>
+        {% endif %}
+        <form method="POST" enctype="multipart/form-data" class="upload-form mt-4">
+            <div class="form-group">
+                <label for="file">Select a CSV file to upload:</label>
+                <div class="custom-file">
+                    <input type="file" class="custom-file-input" name="file" id="file" accept=".csv">
+                    <label class="custom-file-label" for="file" id="file-label">Choose File</label>
+                </div>
+            </div>
+            <div class="form-group">
+                <button class="btn btn-primary" type="submit">Submit</button>
+            </div>
+        </form>
+        
+        <div class="selected-file mt-2" id="selected-file"></div>        
+
+        <div id="loading-indicator" style="display: none;">
+            <div class="spinner-border text-primary" role="status" style="border-radius: 50%;">
+                <span class="sr-only">Loading...</span>
+            </div>
+            <p>Loading...</p>
+        </div>
+
+        {% if plot_html %}
+            <h1 class="mt-5">Sentiment Analysis</h1>
+            <h2 class="mt-4">Bar Chart</h2>
+            <div class="my-4">{{ plot_html|safe }}</div>
+
+            <h2 class="mt-4">Sentiment Analysis Heatmap</h2>
+            <div>{{ heatmap_html|safe }}</div>
+
+            <div class="d-flex justify-content-between align-content-center my-4">
+                {% if positive_wordcloud_encoded %}
+                    <div>
+                        <h3 class="mt-4">Positive Wordcloud</h3>
+                        <img src="data:image/png;base64,{{ positive_wordcloud_encoded }}" alt="Positive Wordcloud" class="img-fluid">
+                    </div>
+                {% endif %}
+                {% if negative_wordcloud_encoded %}
+                    <div>
+                        <h3 class="mt-4">Negative Wordcloud</h3>
+                        <img src="data:image/png;base64,{{ negative_wordcloud_encoded }}" alt="Negative Wordcloud" class="img-fluid">
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <!-- Rest of the code -->
+</body>
+</html>
